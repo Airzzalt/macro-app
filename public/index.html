@@ -52,9 +52,13 @@
         <div class="eyebrow" id="todayEyebrow">Today</div>
         <h1 id="todayDate" style="font-size:26px"></h1>
       </div>
-      <div class="streak num" id="streakChip" title="Logging streak">🔥 <b>0</b></div>
+      <div class="streak num" id="streakChip" title="Logging streak"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 2c.6 3.5-1 5.4-2.6 7-1.2 1.2-2.4 2.5-2.4 4.5a3.5 3.5 0 0 0 7 0c0-1-.4-1.8-.9-2.5 2.4 1.2 4.4 3.7 4.4 6.5A7 7 0 0 1 5 17.5c0-3.4 1.8-5.2 3.5-7C10.6 8.3 12.7 6 13.5 2z"/></svg><b>0</b></div>
     </div>
-    <div class="week" id="weekStrip"></div>
+    <div class="datebar">
+      <button class="icon-btn" id="dayPrev" aria-label="Previous day"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="date-pill" id="datePick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="datePickLabel">Today</span><span class="today-jump hidden" id="todayJump">Today</span></button>
+      <button class="icon-btn" id="dayNext" aria-label="Next day"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
 
     <div class="card ring-wrap">
       <div class="ring-box">
@@ -85,7 +89,7 @@
 
     <div class="card water-card">
       <div class="spread">
-        <div class="row" style="gap:8px"><span style="font-size:20px">💧</span><div><h2 style="font-size:16px">Water</h2><div class="sub num" style="font-size:12.5px"><b id="waterNow" style="color:var(--text)">0</b> / <span id="waterGoal">2500</span> ml</div></div></div>
+        <div class="row" style="gap:10px"><span class="ic-badge water"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5S5 10 5 14.5a7 7 0 0 0 14 0C19 10 12 2.5 12 2.5z"/></svg></span><div><h2 style="font-size:16px">Water</h2><div class="sub num" style="font-size:12.5px"><b id="waterNow" style="color:var(--text)">0</b> / <span id="waterGoal">2500</span> ml</div></div></div>
         <div class="row" style="gap:6px">
           <button class="icon-btn" data-water="-250" aria-label="Remove 250ml" style="font-size:18px">−</button>
           <button class="btn btn-sm water-btn" data-water="250">+250</button>
@@ -96,6 +100,7 @@
       <div class="glasses" id="glasses"></div>
     </div>
 
+    <div class="eyebrow" style="margin:6px 4px -6px">Meals</div>
     <div id="mealList" class="stack"></div>
   </section>
 

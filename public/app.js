@@ -268,12 +268,27 @@ function renderObStep() {
 }
 
 /* ================= TODAY ================= */
-const MEAL_META = { breakfast: ["Breakfast", "🌅"], lunch: ["Lunch", "☀️"], dinner: ["Dinner", "🌙"], snack: ["Snacks", "✦"] };
+const ICON = {
+  breakfast: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17h18M5 17a7 7 0 0 1 14 0M12 3v3M5.6 6.6l2 2M18.4 6.6l-2 2"/></svg>`,
+  lunch: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
+  dinner: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>`,
+  snack: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8c-4 0-7 3-7 7s3 6 5 6 2-1 2-1 0 1 2 1 5-2 5-6-3-7-7-7zM12 8V5M12 5c0-1.5 1.5-2.5 3-2.5"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`,
+  bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg>`,
+  trash: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`,
+  tag: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5" fill="currentColor"/></svg>`,
+  camera: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
+  chat: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>`,
+  x: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+  warn: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 21h20zM12 10v4M12 17.5v.5"/></svg>`,
+  chevL: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>`,
+  chevR: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>`,
+};
+const MEAL_META = { breakfast: ["Breakfast", "breakfast"], lunch: ["Lunch", "lunch"], dinner: ["Dinner", "dinner"], snack: ["Snacks", "snack"] };
 const RING_LEN = 2 * Math.PI * 96;
 
 const dayCache = {}; // date -> {summary, entries} for instant re-renders
-function refreshToday() { delete dayCache[state.date]; weekCache = null; buzz(12); return loadToday(); }
-let weekCache = null;
+function refreshToday() { delete dayCache[state.date]; buzz(12); return loadToday(); }
 
 function greeting() {
   const h = new Date().getHours();
@@ -283,47 +298,85 @@ function greeting() {
 async function loadToday() {
   const today = localISO();
   const isToday = state.date === today;
-  $("#todayEyebrow").textContent = isToday ? "Today" : prettyDate(state.date).split(",")[0];
-  $("#todayDate").textContent = isToday
-    ? `${greeting()}${state.displayName ? ", " + state.displayName : ""}`
-    : prettyDate(state.date).split(",")[1]?.trim() || prettyDate(state.date);
-  renderWeekStrip();
+  $("#todayEyebrow").textContent = isToday ? "Today" : state.date > today ? "Planning ahead" : "Looking back";
+  $("#todayDate").textContent = `${greeting()}${state.displayName ? ", " + state.displayName : ""}`;
+  renderDateBar();
   const cached = dayCache[state.date];
   if (cached) { renderRing(cached.summary.totals, cached.summary.goals); renderWater(cached.summary); renderStreak(cached.summary.streak); renderMeals(cached.entries); }
   try {
-    const [summary, { entries }, week] = await Promise.all([
+    const [summary, { entries }] = await Promise.all([
       api(`/api/summary?date=${state.date}`),
       api(`/api/entries?date=${state.date}`),
-      api(`/api/history?days=7&end=${today}`),
     ]);
     dayCache[state.date] = { summary, entries };
-    weekCache = week;
     state.profileGoals = summary.goals;
     if (summary.goals?.display_name && summary.goals.display_name !== state.displayName) { state.displayName = summary.goals.display_name; if (isToday) $("#todayDate").textContent = `${greeting()}, ${state.displayName}`; }
     renderRing(summary.totals, summary.goals);
     renderWater(summary);
     renderStreak(summary.streak);
     renderMeals(entries);
-    renderWeekStrip();
   } catch (e) { if (e.message !== "Signed out") toast(e.message); }
 }
 
-function renderWeekStrip() {
-  const today = localISO();
-  const goal = +state.profileGoals?.calorie_goal || 0;
-  const byDate = Object.fromEntries((weekCache?.days || []).map((d) => [d.date, d]));
-  // 7-day window ending today, unless viewing an older date — then centre on it
-  const end = state.date > today ? state.date : today;
-  const start = state.date < addDays(end, -6) ? state.date : addDays(end, -6);
-  $("#weekStrip").innerHTML = Array.from({ length: 7 }, (_, i) => {
-    const d = addDays(start, i);
-    const dt = new Date(d + "T12:00");
-    const row = byDate[d];
-    const dot = row ? (goal && row.calories > goal ? "over" : "logged") : "";
-    return `<button data-d="${d}" class="${d === state.date ? "on" : ""} ${d > today ? "future" : ""}"><span>${dt.toLocaleDateString("en-AU", { weekday: "narrow" })}</span><b>${dt.getDate()}</b><i class="${dot}"></i></button>`;
-  }).join("");
-  $$("#weekStrip button").forEach((b) => b.addEventListener("click", () => { if (b.dataset.d === state.date) return; buzz(); state.date = b.dataset.d; loadToday(); }));
+function renderDateBar() {
+  const today = localISO(), isToday = state.date === today;
+  const dt = new Date(state.date + "T12:00");
+  const yesterday = state.date === addDays(today, -1), tomorrow = state.date === addDays(today, 1);
+  $("#datePickLabel").textContent = isToday ? `Today, ${dt.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`
+    : yesterday ? "Yesterday" : tomorrow ? "Tomorrow" : dt.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
+  $("#todayJump").classList.toggle("hidden", isToday);
 }
+$("#dayPrev").addEventListener("click", () => { buzz(); state.date = addDays(state.date, -1); loadToday(); });
+$("#dayNext").addEventListener("click", () => { buzz(); state.date = addDays(state.date, 1); loadToday(); });
+$("#datePick").addEventListener("click", (e) => {
+  if (e.target.id === "todayJump") { buzz(); state.date = localISO(); loadToday(); return; }
+  openCalendar();
+});
+
+function openCalendar() {
+  openSheet((body, close) => {
+    let ym = state.date.slice(0, 7); // YYYY-MM
+    async function draw() {
+      const [y, m] = ym.split("-").map(Number);
+      const first = new Date(y, m - 1, 1), daysIn = new Date(y, m, 0).getDate(), today = localISO();
+      const endIso = `${ym}-${String(daysIn).padStart(2, "0")}`;
+      body.innerHTML = `
+        <div class="cal-head">
+          <button class="icon-btn" id="calPrev">${ICON.chevL}</button>
+          <h2 style="font-size:17px">${first.toLocaleDateString("en-AU", { month: "long", year: "numeric" })}</h2>
+          <button class="icon-btn" id="calNext">${ICON.chevR}</button>
+        </div>
+        <div class="cal-grid" id="calGrid">${["M","T","W","T","F","S","S"].map((d) => `<div class="dow">${d}</div>`).join("")}
+          ${Array.from({ length: (first.getDay() + 6) % 7 }, () => `<button class="pad"></button>`).join("")}
+          ${Array.from({ length: daysIn }, (_, i) => { const iso = `${ym}-${String(i + 1).padStart(2, "0")}`;
+            return `<button data-d="${iso}" class="${iso === state.date ? "on" : ""} ${iso === today ? "today" : ""} ${iso > today ? "future" : ""}">${i + 1}<i></i></button>`; }).join("")}
+        </div>
+        <button class="btn btn-glass btn-sm" id="calToday" style="margin:0 auto">Jump to today</button>`;
+      $("#calPrev", body).addEventListener("click", () => { const d = new Date(y, m - 2, 1); ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; draw(); });
+      $("#calNext", body).addEventListener("click", () => { const d = new Date(y, m, 1); ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; draw(); });
+      $("#calToday", body).addEventListener("click", () => { buzz(); state.date = today; close(); loadToday(); });
+      $$("[data-d]", body).forEach((b) => b.addEventListener("click", () => { buzz(); state.date = b.dataset.d; close(); loadToday(); }));
+      try {
+        const { days, calorie_goal } = await api(`/api/history?days=${daysIn}&end=${endIso}`);
+        for (const d of days) { const b = $(`[data-d="${d.date}"] i`, body); if (b) b.className = calorie_goal && d.calories > calorie_goal ? "over" : "logged"; }
+      } catch {}
+    }
+    draw();
+  });
+}
+
+// roll over to the new day automatically (app left open past midnight / resumed next morning)
+let bootDay = localISO();
+function checkDayRollover() {
+  const now = localISO();
+  if (now === bootDay) return;
+  if (state.date === bootDay) state.date = now;
+  bootDay = now;
+  Object.keys(dayCache).forEach((k) => delete dayCache[k]);
+  if (state.view === "today") loadToday();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { checkDayRollover(); if (state.view === "today" && state.user) loadToday(); } });
+setInterval(checkDayRollover, 60000);
 
 function renderStreak(n) {
   const chip = $("#streakChip");
@@ -352,7 +405,7 @@ $$("[data-water]").forEach((b) => b.addEventListener("click", async () => {
     const { ml } = await api("/api/water", { method: "POST", body: { date: state.date, delta_ml: delta } });
     renderWater({ goals: { water_goal_ml: state.waterGoal }, water_ml: ml });
     if (dayCache[state.date]) dayCache[state.date].summary.water_ml = ml;
-    if (ml >= state.waterGoal && ml - delta < state.waterGoal) toast("💧 Water goal hit");
+    if (ml >= state.waterGoal && ml - delta < state.waterGoal) toast("Water goal reached");
   } catch (e) { toast(e.message); loadToday(); }
 }));
 
@@ -401,29 +454,64 @@ function setBar(barSel, valSel, v, goal) {
 function renderMeals(entries) {
   const byMeal = { breakfast: [], lunch: [], dinner: [], snack: [] };
   for (const e of entries) (byMeal[e.meal_type] || byMeal.snack).push(e);
-  $("#mealList").innerHTML = Object.entries(MEAL_META).map(([key, [label, emoji]]) => {
+  $("#mealList").innerHTML = Object.entries(MEAL_META).map(([key, [label, icon]]) => {
     const items = byMeal[key];
     const kcal = r0(items.reduce((a, e) => a + +e.calories, 0));
     return `<div class="card meal-card">
       <div class="meal-head">
-        <span class="meal-emoji">${emoji}</span><h2 style="font-size:16px">${label}</h2>
+        <span class="ic-badge ${icon}">${ICON[icon]}</span><h2 style="font-size:16px">${label}</h2>
         <span class="kcal num">${items.length ? kcal.toLocaleString() + " kcal" : ""}</span>
-        ${items.length ? `<button class="icon-btn" style="width:32px;height:32px;font-size:15px" data-savemeal="${key}" aria-label="Save as meal">☆</button>` : ""}
-        <button class="icon-btn" style="width:32px;height:32px;font-size:18px" data-addmeal="${key}" aria-label="Add to ${label}">+</button>
+        ${items.length ? `<button class="icon-btn" style="width:32px;height:32px" data-savemeal="${key}" aria-label="Save as meal">${ICON.bookmark}</button>` : ""}
+        <button class="icon-btn" style="width:32px;height:32px" data-addmeal="${key}" aria-label="Add to ${label}">${ICON.plus}</button>
       </div>
       ${items.map((e) => `
-        <button class="entry-row" data-entry="${e.id}">
-          <span class="n"><span class="t">${esc(e.name)}</span><span class="s">${esc([e.brand, e.serving_desc, +e.quantity !== 1 ? `×${+e.quantity}` : ""].filter(Boolean).join(" · "))}</span></span>
-          <span class="kc num">${r0(e.calories)}</span>
-        </button>`).join("")}
+        <div class="swipe" data-swipe="${e.id}">
+          <button class="swipe-del" data-delentry="${e.id}">${ICON.trash} Delete</button>
+          <button class="entry-row" data-entry="${e.id}">
+            <span class="n"><span class="t">${esc(e.name)}</span><span class="s">${esc([e.brand, e.serving_desc, +e.quantity !== 1 ? `×${+e.quantity}` : ""].filter(Boolean).join(" · "))}</span></span>
+            <span class="kc num">${r0(e.calories)}</span>
+          </button>
+        </div>`).join("")}
       ${!items.length ? `<div class="empty-hint">Nothing logged yet</div>` : ""}
     </div>`;
   }).join("");
-  $$("[data-addmeal]").forEach((b) => b.addEventListener("click", () => openAddSheet(b.dataset.addmeal)));
+  $$("[data-addmeal]").forEach((b) => b.addEventListener("click", () => { buzz(); openAddSheet(b.dataset.addmeal); }));
   $$("[data-savemeal]").forEach((b) => b.addEventListener("click", () => saveMealFromDay(b.dataset.savemeal, byMeal[b.dataset.savemeal])));
-  $$("[data-entry]").forEach((b) => {
-    const entry = entries.find((e) => e.id === +b.dataset.entry);
-    b.addEventListener("click", () => openEntryEdit(entry));
+  $$("[data-delentry]").forEach((b) => b.addEventListener("click", async () => {
+    buzz(15);
+    try { await api(`/api/entries/${b.dataset.delentry}`, { method: "DELETE" }); toast("Deleted"); refreshToday(); }
+    catch (err) { toast(err.message); }
+  }));
+  $$(".swipe").forEach((wrap) => {
+    const row = $(".entry-row", wrap);
+    const entry = entries.find((e) => e.id === +row.dataset.entry);
+    let x0 = null, y0 = null, dx = 0, horizontal = null;
+    row.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; horizontal = null; }, { passive: true });
+    row.addEventListener("touchmove", (e) => {
+      if (x0 == null) return;
+      const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+      if (horizontal == null && (Math.abs(mx) > 6 || Math.abs(my) > 6)) horizontal = Math.abs(mx) > Math.abs(my);
+      if (!horizontal) return;
+      dx = Math.min(0, Math.max(mx + (wrap.classList.contains("open") ? -88 : 0), -110));
+      wrap.classList.add("dragging");
+      row.style.transform = `translateX(${dx}px)`;
+    }, { passive: true });
+    row.addEventListener("touchend", () => {
+      if (x0 == null) return;
+      wrap.classList.remove("dragging"); row.style.transform = "";
+      if (horizontal) {
+        const open = dx < -50;
+        $$(".swipe.open").forEach((o) => o !== wrap && o.classList.remove("open"));
+        wrap.classList.toggle("open", open);
+        if (open) buzz();
+      }
+      x0 = null;
+    });
+    row.addEventListener("click", () => {
+      if (wrap.classList.contains("open")) { wrap.classList.remove("open"); return; }
+      if ($(".swipe.open")) { $$(".swipe.open").forEach((o) => o.classList.remove("open")); return; }
+      openEntryEdit(entry);
+    });
   });
 }
 
@@ -612,9 +700,9 @@ function openPortionSheet(food, meal, closeParent) {
 /* ---------- AI tab ---------- */
 function renderAiTab({ body, close, getMeal }) {
   body.innerHTML = `
-    <button class="ai-tile" id="aiLabel"><span class="ic">🏷️</span><span><div class="t">Scan a nutrition label</div><div class="d">Photo of the panel — reads kJ/kcal, serving size, macros</div></span></button>
-    <button class="ai-tile" id="aiMeal"><span class="ic">📸</span><span><div class="t">Photo of your meal</div><div class="d">Snap the plate, optionally describe what's in it</div></span></button>
-    <button class="ai-tile" id="aiText"><span class="ic">💬</span><span><div class="t">Describe what you ate</div><div class="d">"Chicken wrap and a flat white" — AI estimates it</div></span></button>
+    <button class="ai-tile" id="aiLabel"><span class="ic-badge ai">${ICON.tag}</span><span><div class="t">Scan a nutrition label</div><div class="d">Photo of the panel — reads kJ/kcal, serving size, macros</div></span></button>
+    <button class="ai-tile" id="aiMeal"><span class="ic-badge ai">${ICON.camera}</span><span><div class="t">Photo of your meal</div><div class="d">Snap the plate, optionally describe what's in it</div></span></button>
+    <button class="ai-tile" id="aiText"><span class="ic-badge ai">${ICON.chat}</span><span><div class="t">Describe what you ate</div><div class="d">"Chicken wrap and a flat white" — AI estimates it</div></span></button>
     <input type="file" accept="image/*" capture="environment" id="aiFileLabel" class="hidden">`;
   $("#aiLabel", body).addEventListener("click", () => {
     const f = $("#aiFileLabel", body);
@@ -643,7 +731,7 @@ function renderAiTab({ body, close, getMeal }) {
 function renderMealPhotoForm(body, getMeal, close) {
   body.innerHTML = `
     <h2 style="font-size:18px">Photo of your meal</h2>
-    <button class="btn btn-glass" id="mpPick">📸 Take / choose photo</button>
+    <button class="btn btn-glass" id="mpPick">Take / choose photo</button>
     <div id="mpPreview" class="hidden" style="border-radius:14px;overflow:hidden;max-height:180px"><img id="mpImg" style="width:100%;object-fit:cover" alt="Meal photo"></div>
     <textarea id="mpDesc" placeholder="Optional — describe it: what you used, portion sizes, cooking oil…"></textarea>
     <button class="btn" id="mpGo" disabled>Analyse meal</button>
@@ -692,9 +780,9 @@ function renderAiConfirm(body, { items, confidence, notes }, getMeal, closeParen
   function draw() {
     list.innerHTML = rows.map((it, i) => `
       <div class="confirm-item">
-        <div class="row"><input value="${esc(it.name)}" data-f="name" data-i="${i}" style="flex:1"><button class="icon-btn" style="width:32px;height:32px;font-size:14px" data-del="${i}" aria-label="Remove">✕</button></div>
+        <div class="row"><input value="${esc(it.name)}" data-f="name" data-i="${i}" style="flex:1"><button class="icon-btn" style="width:32px;height:32px;font-size:14px" data-del="${i}" aria-label="Remove">${ICON.x}</button></div>
         <div class="s" style="font-size:12px;color:var(--text-3)">${esc(it.serving_desc || "")}</div>
-        ${it.warning ? `<div class="warn">⚠︎ ${esc(it.warning)}</div>` : ""}
+        ${it.warning ? `<div class="warn">${ICON.warn} ${esc(it.warning)}</div>` : ""}
         <div class="mini-grid">
           <label>kcal<input type="number" inputmode="decimal" value="${r0(it.calories)}" data-f="calories" data-i="${i}"></label>
           <label>P g<input type="number" inputmode="decimal" value="${r1(it.protein_g)}" data-f="protein_g" data-i="${i}"></label>
@@ -748,7 +836,7 @@ async function renderSavedTab({ body, close, getMeal }) {
           <span class="n"><span class="t">${esc(f.name)}</span><span class="s">${esc(f.serving_desc || "")} · ${r0(f.calories)} kcal</span></span>
           <span class="chip">recent</span>
         </button>`).join("")}
-      ${!meals.length && !recent.length ? `<p class="sub" style="text-align:center;padding:18px">Nothing saved yet — log some food and star a meal, or save one from an AI result</p>` : ""}`;
+      ${!meals.length && !recent.length ? `<p class="sub" style="text-align:center;padding:18px">Nothing saved yet — log some food and bookmark a meal, or save one from an AI result</p>` : ""}`;
     $$("[data-logmeal]", body).forEach((b) => b.addEventListener("click", async () => {
       try {
         await api(`/api/meals/${b.dataset.logmeal}/log`, { method: "POST", body: { entry_date: state.date, meal_type: getMeal() } });
@@ -807,7 +895,7 @@ async function startBarcodeScan(meal, closeParent) {
   } catch { toast("Camera access denied"); return; }
   const overlay = document.createElement("div");
   overlay.id = "scanOverlay";
-  overlay.innerHTML = `<video autoplay playsinline muted></video><div class="frame"></div><button class="icon-btn close">✕</button>`;
+  overlay.innerHTML = `<video autoplay playsinline muted></video><div class="frame"></div><button class="icon-btn close">${ICON.x}</button>`;
   document.body.append(overlay);
   const video = $("video", overlay);
   video.srcObject = stream;
@@ -916,7 +1004,7 @@ async function loadWeight() {
     const gl = $("#wGoalLine");
     if (gw && last) {
       const diff = r1(last.weight_kg - gw);
-      gl.textContent = Math.abs(diff) < 0.3 ? `🎯 At your goal weight of ${gw} kg` : `${Math.abs(diff)} kg ${diff > 0 ? "to lose" : "to gain"} to reach ${gw} kg`;
+      gl.textContent = Math.abs(diff) < 0.3 ? `At your goal weight of ${gw} kg` : `${Math.abs(diff)} kg ${diff > 0 ? "to lose" : "to gain"} to reach ${gw} kg`;
       gl.classList.remove("hidden");
     } else gl.classList.add("hidden");
     $("#wTrendLabel").textContent = `${state.wdays}-day change`;
@@ -949,7 +1037,7 @@ async function loadWeight() {
     $("#wList").innerHTML = [...weights].reverse().slice(0, 14).map((w) => `
       <div class="day-row"><span class="n"><span class="t">${new Date(w.date + "T12:00").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}</span></span>
       <span class="kc num">${r1(w.weight_kg)} kg</span>
-      <button class="icon-btn" style="width:30px;height:30px;font-size:13px" data-wdel="${w.date}" aria-label="Delete">✕</button></div>`).join("") ||
+      <button class="icon-btn" style="width:30px;height:30px;font-size:13px" data-wdel="${w.date}" aria-label="Delete">${ICON.x}</button></div>`).join("") ||
       `<p class="sub" style="padding:18px;text-align:center">No weigh-ins yet</p>`;
     $$("[data-wdel]").forEach((b) => b.addEventListener("click", async () => {
       try { await api(`/api/weight/${b.dataset.wdel}`, { method: "DELETE" }); loadWeight(); } catch (e) { toast(e.message); }
@@ -1003,7 +1091,7 @@ async function loadSettings() {
       <div class="spread" style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
         <span><b style="font-size:14.5px">${esc(m.name)}</b><div class="sub num" style="font-size:12px">${r0(m.calories)} kcal · used ${m.use_count}×</div></span>
         <button class="btn-quiet" data-mdel="${m.id}" style="color:var(--bad)">Delete</button>
-      </div>`).join("") : `<p class="sub" style="font-size:13.5px">None yet — save one from a day's meal (☆) or an AI result.</p>`;
+      </div>`).join("") : `<p class="sub" style="font-size:13.5px">None yet — save one from a day's meals (bookmark icon) or an AI result.</p>`;
     $$("[data-mdel]").forEach((b) => b.addEventListener("click", async () => {
       try { await api(`/api/meals/${b.dataset.mdel}`, { method: "DELETE" }); loadSettings(); } catch (e) { toast(e.message); }
     }));

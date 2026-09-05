@@ -196,22 +196,59 @@ input[type="date"] { color-scheme: dark; }
 }
 .streak.bump { animation: popIcon 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-/* ---------- week strip ---------- */
-.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 4px; }
-.week button {
-  display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 0 8px;
-  border-radius: 16px; background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.05);
-  color: var(--text-2); font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, border-color 0.2s ease;
+/* ---------- date bar (centered) ---------- */
+.datebar { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 2px 0 6px; }
+.date-pill {
+  display: flex; align-items: center; gap: 9px; padding: 11px 18px; border-radius: 980px; min-width: 190px; justify-content: center;
+  background: var(--glass-strong); border: 1px solid var(--glass-border-strong); color: var(--text); font-weight: 600; font-size: 15px;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(0,0,0,0.3);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease;
 }
-.week button:active { transform: scale(0.92); }
-.week button b { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-.week button i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.15); transition: background 0.2s ease, transform 0.3s ease; }
-.week button i.logged { background: var(--accent); }
-.week button i.over { background: var(--bad); }
-.week button.on { background: rgba(10, 132, 255, 0.18); border-color: rgba(10, 132, 255, 0.5); }
-.week button.on i { transform: scale(1.4); }
-.week button.future { opacity: 0.45; }
+.date-pill:active { transform: scale(0.96); }
+.date-pill svg { color: var(--accent); flex: none; }
+.today-jump { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); padding: 3px 8px; border-radius: 980px; background: var(--accent-soft); }
+
+/* ---------- calendar sheet ---------- */
+.cal-head { display: flex; align-items: center; justify-content: space-between; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-grid .dow { text-align: center; font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 0; }
+.cal-grid button {
+  aspect-ratio: 1; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 15px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums;
+  transition: background 0.15s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.cal-grid button:active { transform: scale(0.9); }
+.cal-grid button i { width: 5px; height: 5px; border-radius: 50%; background: transparent; }
+.cal-grid button i.logged { background: var(--accent); }
+.cal-grid button i.over { background: var(--bad); }
+.cal-grid button.today { color: var(--accent); }
+.cal-grid button.on { background: var(--accent); color: #fff; }
+.cal-grid button.on i { background: rgba(255,255,255,0.8); }
+.cal-grid button.future { opacity: 0.35; }
+.cal-grid button.pad { pointer-events: none; }
+
+/* ---------- icon badges ---------- */
+.ic-badge { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; background: rgba(255,255,255,0.07); color: var(--text-2); }
+.ic-badge.water { background: rgba(100, 210, 255, 0.14); color: #64d2ff; }
+.ic-badge.breakfast { background: rgba(255, 179, 64, 0.14); color: #ffb340; }
+.ic-badge.lunch { background: rgba(255, 214, 10, 0.12); color: #ffd60a; }
+.ic-badge.dinner { background: rgba(94, 92, 230, 0.18); color: #9d9bff; }
+.ic-badge.snack { background: rgba(48, 209, 88, 0.13); color: #30d158; }
+.ic-badge.ai { background: var(--accent-soft); color: #6db9ff; }
+
+/* ---------- swipe to delete ---------- */
+.swipe { position: relative; overflow: hidden; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.swipe .entry-row { border-top: none; background: transparent; position: relative; z-index: 1; transition: transform 0.28s cubic-bezier(0.22, 0.9, 0.24, 1), background 0.15s ease; }
+.swipe.dragging .entry-row { transition: background 0.15s ease; }
+.swipe-del {
+  position: absolute; top: 0; bottom: 0; right: 0; width: 88px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--bad); color: #fff; font-weight: 600; font-size: 14px;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.swipe.dragging .swipe-del, .swipe.open .swipe-del { opacity: 1; }
+.swipe.open .entry-row { transform: translateX(-88px); }
 
 /* ---------- water ---------- */
 .water-btn { padding: 8px 12px; font-size: 13px; min-height: 36px; background: linear-gradient(180deg, #4fc3ff, #1aa7f0); box-shadow: 0 4px 14px rgba(26, 167, 240, 0.3), inset 0 1px 0 rgba(255,255,255,0.3); }
@@ -257,10 +294,10 @@ input[type="date"] { color-scheme: dark; }
 .macro-row .val b { color: var(--text); font-weight: 650; }
 
 /* ---------- meals ---------- */
-.meal-card { padding: 4px 0; }
-.meal-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+.meal-card { padding: 4px 0; overflow: hidden; }
+.meal-head { display: flex; align-items: center; gap: 11px; padding: 12px 16px; }
 .meal-head .kcal { margin-left: auto; color: var(--text-2); font-size: 14px; }
-.meal-emoji { font-size: 18px; }
+.meal-head .icon-btn svg { width: 16px; height: 16px; }
 .entry-row {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   padding: 11px 16px; border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -368,7 +405,7 @@ input[type="date"] { color-scheme: dark; }
   transition: background 0.15s ease;
 }
 .ai-tile:active { background: rgba(255, 255, 255, 0.09); }
-.ai-tile .ic { font-size: 26px; flex: none; }
+.ai-tile .ic-badge { width: 42px; height: 42px; border-radius: 13px; }
 .ai-tile .t { font-weight: 600; font-size: 15px; }
 .ai-tile .d { font-size: 12.5px; color: var(--text-2); margin-top: 1px; }
 
