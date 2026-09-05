@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Macro</title>
+<meta name="description" content="Personal calorie & macro tracker">
+<meta name="theme-color" content="#050508">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Macro">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ AUTH ============ -->
+  <section id="view-auth" class="auth-wrap hidden">
+    <div style="text-align:center">
+      <div class="hero-mark">
+        <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="16" stroke="rgba(255,255,255,.35)" stroke-width="6"/><path d="M24 8 a16 16 0 0 1 13.8 24" stroke="#fff" stroke-width="6" stroke-linecap="round"/></svg>
+      </div>
+      <h1>Macro</h1>
+      <p class="sub" id="authSub">Your personal calorie &amp; macro tracker</p>
+    </div>
+    <form class="card stack" id="authForm">
+      <label class="field">Username<input id="authUser" autocomplete="username" required minlength="2" maxlength="32" placeholder="username"></label>
+      <label class="field">Password<input id="authPass" type="password" autocomplete="current-password" required minlength="6" placeholder="••••••••"></label>
+      <button class="btn" id="authBtn" type="submit">Sign in</button>
+    </form>
+  </section>
+
+  <!-- ============ ONBOARDING ============ -->
+  <section id="view-onboarding" class="hidden stack" style="padding-top:20px; gap:20px">
+    <div class="dots" id="obDots"><i class="on"></i><i></i><i></i><i></i></div>
+    <div id="obStep"></div>
+  </section>
+
+  <!-- ============ TODAY ============ -->
+  <section id="view-today" class="hidden stack">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow" id="todayEyebrow">Today</div>
+        <h1 id="todayDate" style="font-size:26px"></h1>
+      </div>
+      <div class="row">
+        <button class="icon-btn" id="dayPrev" aria-label="Previous day">‹</button>
+        <button class="icon-btn" id="dayNext" aria-label="Next day">›</button>
+      </div>
+    </div>
+
+    <div class="card ring-wrap">
+      <div class="ring-box">
+        <svg width="216" height="216" viewBox="0 0 216 216">
+          <circle cx="108" cy="108" r="96" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="15"/>
+          <circle id="ringArc" cx="108" cy="108" r="96" fill="none" stroke="url(#ringGrad)" stroke-width="15" stroke-linecap="round" stroke-dasharray="603.2" stroke-dashoffset="603.2" style="transition: stroke-dashoffset .7s cubic-bezier(.25,.1,.25,1), stroke .3s"/>
+          <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0a84ff"/><stop offset="100%" stop-color="#5ac8fa"/>
+          </linearGradient></defs>
+        </svg>
+        <div class="ring-center">
+          <div class="big num" id="ringNum">–</div>
+          <div class="eyebrow" id="ringLabel">kcal remaining</div>
+        </div>
+      </div>
+      <div class="ring-stats">
+        <div><div class="v num" id="statEaten">–</div><div class="eyebrow">eaten</div></div>
+        <div><div class="v num" id="statGoal">–</div><div class="eyebrow">goal</div></div>
+        <div><div class="v num" id="statBurnPct">–</div><div class="eyebrow">of goal</div></div>
+      </div>
+    </div>
+
+    <div class="card stack" style="gap:15px">
+      <div class="macro-row"><span class="name">Protein</span><div class="bar"><i id="barP" style="background:var(--protein)"></i></div><span class="val num" id="valP">– / –</span></div>
+      <div class="macro-row"><span class="name">Carbs</span><div class="bar"><i id="barC" style="background:var(--carbs)"></i></div><span class="val num" id="valC">– / –</span></div>
+      <div class="macro-row"><span class="name">Fat</span><div class="bar"><i id="barF" style="background:var(--fat)"></i></div><span class="val num" id="valF">– / –</span></div>
+    </div>
+
+    <div id="mealList" class="stack"></div>
+  </section>
+
+  <!-- ============ HISTORY ============ -->
+  <section id="view-history" class="hidden stack">
+    <div class="page-head"><div><div class="eyebrow">Last 30 days</div><h1>History</h1></div></div>
+    <div class="card"><div id="histChart"></div></div>
+    <div class="card" style="padding:4px 0"><div id="histList"></div></div>
+  </section>
+
+  <!-- ============ WEIGHT ============ -->
+  <section id="view-weight" class="hidden stack">
+    <div class="page-head"><div><div class="eyebrow">Body weight</div><h1>Weight</h1></div></div>
+    <div class="card stack">
+      <div class="spread">
+        <div><div class="eyebrow">Current</div><div style="font-size:40px;font-weight:700;letter-spacing:-0.02em" class="num" id="wNow">–</div></div>
+        <div style="text-align:right"><div class="eyebrow" id="wTrendLabel">30-day change</div><div style="font-size:20px;font-weight:650" class="num" id="wTrend">–</div></div>
+      </div>
+      <form class="row" id="wForm">
+        <input id="wInput" type="number" step="0.1" min="20" max="400" placeholder="Log today's weight (kg)" inputmode="decimal">
+        <button class="btn btn-sm" type="submit" style="flex:none">Log</button>
+      </form>
+    </div>
+    <div class="card">
+      <div class="spread" style="margin-bottom:8px"><h2 style="font-size:16px">Trend</h2>
+        <div class="seg" style="width:150px"><button data-wdays="30" class="on">30d</button><button data-wdays="90">90d</button></div>
+      </div>
+      <div id="wChart"></div>
+    </div>
+    <div class="card" style="padding:4px 0"><div id="wList"></div></div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section id="view-settings" class="hidden stack">
+    <div class="page-head"><div><div class="eyebrow" id="setHello"></div><h1>Settings</h1></div></div>
+
+    <div class="card stack">
+      <h2 style="font-size:17px">Daily goals</h2>
+      <div class="grid-2">
+        <label class="field">Calories<input id="gCal" type="number" inputmode="numeric" min="800" max="8000"></label>
+        <label class="field">Protein (g)<input id="gPro" type="number" inputmode="numeric" min="0" max="500"></label>
+        <label class="field">Carbs (g)<input id="gCarb" type="number" inputmode="numeric" min="0" max="900"></label>
+        <label class="field">Fat (g)<input id="gFat" type="number" inputmode="numeric" min="0" max="400"></label>
+      </div>
+      <button class="btn btn-glass" id="saveGoals">Save goals</button>
+    </div>
+
+    <div class="card stack">
+      <h2 style="font-size:17px">Your stats</h2>
+      <div class="grid-2">
+        <label class="field">Sex<select id="sSex"><option value="male">Male</option><option value="female">Female</option></select></label>
+        <label class="field">Date of birth<input id="sDob" type="date"></label>
+        <label class="field">Height (cm)<input id="sHeight" type="number" inputmode="decimal" min="100" max="250"></label>
+        <label class="field">Weight (kg)<input id="sWeight" type="number" step="0.1" inputmode="decimal" min="20" max="400"></label>
+        <label class="field">Activity<select id="sAct">
+          <option value="sedentary">Sedentary</option><option value="light">Lightly active</option>
+          <option value="moderate">Moderately active</option><option value="active">Very active</option>
+          <option value="very_active">Athlete</option></select></label>
+        <label class="field">Goal<select id="sGoal">
+          <option value="cut">Lose fat</option><option value="maintain">Maintain</option><option value="bulk">Build muscle</option></select></label>
+      </div>
+      <label class="field" id="sRateWrap">Rate (kg per week)<input id="sRate" type="number" step="0.05" min="0" max="1.5" inputmode="decimal"></label>
+      <button class="btn btn-glass" id="recalcBtn">Save &amp; recalculate goals</button>
+      <p class="sub" id="recalcOut" style="font-size:13px"></p>
+    </div>
+
+    <div class="card stack">
+      <h2 style="font-size:17px">Saved meals</h2>
+      <div id="setMeals" class="stack" style="gap:8px"></div>
+    </div>
+
+    <div class="card stack">
+      <h2 style="font-size:17px">AI</h2>
+      <p class="sub" id="aiInfo" style="font-size:13.5px">Checking…</p>
+    </div>
+
+    <div class="card stack">
+      <h2 style="font-size:17px">Account</h2>
+      <form class="stack" id="pwForm" style="gap:10px">
+        <label class="field">Current password<input id="pwCur" type="password" autocomplete="current-password"></label>
+        <label class="field">New password<input id="pwNew" type="password" autocomplete="new-password" minlength="6"></label>
+        <button class="btn btn-glass" type="submit">Change password</button>
+      </form>
+      <button class="btn btn-danger" id="logoutBtn">Sign out</button>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ TAB BAR ============ -->
+<nav id="tabbar" class="hidden"><div class="inner">
+  <button class="tab on" data-view="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Today</button>
+  <button class="tab" data-view="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19V10M10 19V5M16 19v-7M21 19H3"/></svg>History</button>
+  <button class="fab" id="fabAdd" aria-label="Add food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button class="tab" data-view="weight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17c3-6 6 2 9-4s6 2 9-4"/></svg>Weight</button>
+  <button class="tab" data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.06-.4.1-.8.1-1.2z"/></svg>Settings</button>
+</div></nav>
+
+<!-- sheets & toast are created by app.js -->
+<div id="toast" role="status"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
