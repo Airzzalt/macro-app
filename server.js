@@ -478,7 +478,15 @@ app.delete("/api/weight/:date", auth, async (req, res, next) => {
 });
 
 // ---------- static ----------
-app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h", index: "index.html" }));
+// App code must always revalidate (ETag → cheap 304s); only icons are long-cached.
+app.use(express.static(path.join(__dirname, "public"), {
+  index: "index.html",
+  etag: true,
+  setHeaders(res, filePath) {
+    if (/\.(png|jpg|jpeg|svg|ico|woff2?)$/i.test(filePath)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    else res.setHeader("Cache-Control", "no-cache");
+  },
+}));
 app.get("/healthz", (req, res) => res.json({ ok: true }));
 
 // error handler

@@ -1195,7 +1195,5 @@ $("#logoutBtn").addEventListener("click", async () => {
       document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
       setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
     }).catch(() => {});
-    let hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) location.reload(); hadController = true; });
   }
 })();
