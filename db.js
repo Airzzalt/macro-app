@@ -16,4 +16,8 @@ export async function migrate() {
   await sql`CREATE TABLE IF NOT EXISTS saved_meals (id SERIAL PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, items JSONB NOT NULL DEFAULT '[]', calories NUMERIC NOT NULL, protein_g NUMERIC DEFAULT 0, carbs_g NUMERIC DEFAULT 0, fat_g NUMERIC DEFAULT 0, use_count INT DEFAULT 0, last_used_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now())`;
   await sql`CREATE TABLE IF NOT EXISTS weight_log (id SERIAL PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, log_date DATE NOT NULL, weight_kg NUMERIC NOT NULL, created_at TIMESTAMPTZ DEFAULT now(), UNIQUE(user_id, log_date))`;
   await sql`CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ DEFAULT now(), expires_at TIMESTAMPTZ NOT NULL)`;
+  await sql`CREATE TABLE IF NOT EXISTS water_log (id SERIAL PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, log_date DATE NOT NULL, ml INT NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ DEFAULT now(), UNIQUE(user_id, log_date))`;
+  await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS water_goal_ml INT DEFAULT 2500`;
+  await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS goal_weight_kg NUMERIC`;
+  await sql`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS display_name TEXT`;
 }

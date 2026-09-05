@@ -146,6 +146,21 @@ ${RULES}` },
   return parseJson(raw);
 }
 
+// Revise a previous estimate using the user's correction
+export async function refineItems(items, instruction) {
+  const raw = await chat([
+    { role: "user", content:
+`You are an expert nutritionist. Here is a nutrition estimate you produced earlier, as JSON:
+${JSON.stringify({ items })}
+The user corrects it: "${instruction}"
+Apply the correction faithfully (portion sizes, added/removed items, cooking method, brand) and re-estimate every affected item. Keep unaffected items unchanged.
+Return JSON: {"items":[...], "confidence": "high"|"medium"|"low", "notes": string (one short sentence on what changed)}
+${ITEM_SCHEMA}
+${RULES}` },
+  ], { maxTokens: 2000 });
+  return parseJson(raw);
+}
+
 export async function analyzeText(description) {
   const raw = await chat([
     { role: "user", content:

@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql, migrate } from "./db.js";
-import { detectModel, aiStatus, analyzeLabel, analyzeMeal, analyzeText } from "./ai.js";
+import { detectModel, aiStatus, analyzeLabel, analyzeMeal, analyzeText, refineItems } from "./ai.js";
 import { searchFoods, lookupBarcode } from "./food.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,16 +64,30 @@ app.get("/api/auth/state", async (req, res, next) => {
 
 app.post("/api/auth/register", async (req, res, next) => {
   try {
-    const [{ count }] = await sql`SELECT count(*)::int AS count FROM users`;
-    if (count > 0) return res.status(403).json({ error: "This app already has its owner — sign in instead" });
-    const { username, password } = req.body || {};
+    const { username, password, invite } = req.body || {};
+    if (process.env.INVITE_CODE && invite !== process.env.INVITE_CODE) return res.status(403).json({ error: "Invite code is wrong" });
     if (!username || !/^[a-zA-Z0-9_.-]{2,32}$/.test(username)) return res.status(400).json({ error: "Username: 2–32 letters, numbers, . _ -" });
     if (!password || password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    const existing = await sql`SELECT 1 FROM users WHERE lower(username) = lower(${username})`;
+    if (existing.length) return res.status(409).json({ error: "That username is taken" });
     const hash = await bcrypt.hash(password, 12);
     const [user] = await sql`INSERT INTO users (username, password_hash) VALUES (${username}, ${hash}) RETURNING id, username`;
     await sql`INSERT INTO profiles (user_id) VALUES (${user.id})`;
     await createSession(res, user.id);
     res.json({ user: { id: user.id, username: user.username, onboarded: false } });
+  } catch (e) { next(e); }
+});
+
+app.get("/api/auth/config", (req, res) => res.json({ inviteRequired: !!process.env.INVITE_CODE }));
+
+app.delete("/api/auth/account", auth, async (req, res, next) => {
+  try {
+    const { password } = req.body || {};
+    const [u] = await sql`SELECT password_hash FROM users WHERE id = ${req.userId}`;
+    if (!(await bcrypt.compare(password || "", u.password_hash))) return res.status(401).json({ error: "Password is wrong" });
+    await sql`DELETE FROM users WHERE id = ${req.userId}`; // cascades to everything
+    res.clearCookie(COOKIE, { path: "/" });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
@@ -154,6 +168,9 @@ app.put("/api/profile", auth, async (req, res, next) => {
         protein_goal_g = COALESCE(${b.protein_goal_g ?? null}, protein_goal_g),
         carbs_goal_g = COALESCE(${b.carbs_goal_g ?? null}, carbs_goal_g),
         fat_goal_g = COALESCE(${b.fat_goal_g ?? null}, fat_goal_g),
+        water_goal_ml = COALESCE(${b.water_goal_ml ?? null}, water_goal_ml),
+        goal_weight_kg = COALESCE(${b.goal_weight_kg ?? null}, goal_weight_kg),
+        display_name = COALESCE(${b.display_name ?? null}, display_name),
         onboarded = COALESCE(${b.onboarded ?? null}, onboarded),
         updated_at = now()
       WHERE user_id = ${req.userId} RETURNING *`;
@@ -186,20 +203,33 @@ app.get("/api/barcode/:code", auth, async (req, res, next) => {
 // ---------- AI ----------
 app.get("/api/ai/status", auth, (req, res) => res.json(aiStatus()));
 
+// Normalise AI output and sanity-check it: macros should roughly explain the calories.
 function validItems(parsed) {
   const items = Array.isArray(parsed?.items) ? parsed.items : [];
   return items
     .filter((i) => i && i.name && Number.isFinite(+i.calories))
-    .map((i) => ({
-      name: String(i.name).slice(0, 200),
-      serving_desc: String(i.serving_desc || "").slice(0, 120),
-      quantity: Number.isFinite(+i.quantity) && +i.quantity > 0 ? +i.quantity : 1,
-      calories: Math.max(0, +i.calories),
-      protein_g: Math.max(0, +i.protein_g || 0),
-      carbs_g: Math.max(0, +i.carbs_g || 0),
-      fat_g: Math.max(0, +i.fat_g || 0),
-    }));
+    .map((i) => {
+      const it = {
+        name: String(i.name).slice(0, 200),
+        serving_desc: String(i.serving_desc || "").slice(0, 120),
+        quantity: Number.isFinite(+i.quantity) && +i.quantity > 0 ? +i.quantity : 1,
+        calories: Math.max(0, Math.round(+i.calories)),
+        protein_g: Math.max(0, r1(+i.protein_g || 0)),
+        carbs_g: Math.max(0, r1(+i.carbs_g || 0)),
+        fat_g: Math.max(0, r1(+i.fat_g || 0)),
+      };
+      const fromMacros = it.protein_g * 4 + it.carbs_g * 4 + it.fat_g * 9;
+      if (it.calories >= 40 && fromMacros > 0) {
+        const ratio = fromMacros / it.calories;
+        if (ratio < 0.7 || ratio > 1.35) it.warning = `Macros add up to ~${Math.round(fromMacros)} kcal but calories say ${it.calories} — double-check`;
+      } else if (it.calories >= 40 && fromMacros === 0) {
+        it.warning = "No macros returned — add them or re-run";
+      }
+      if (it.calories > 3000) it.warning = "Unusually high — check the portion";
+      return it;
+    });
 }
+const r1 = (n) => Math.round(n * 10) / 10;
 
 async function aiRoute(res, fn) {
   try {
@@ -229,6 +259,12 @@ app.post("/api/ai/describe", auth, (req, res) => {
   const { description } = req.body || {};
   if (!description?.trim()) return res.status(400).json({ error: "description required" });
   aiRoute(res, () => analyzeText(description.trim()));
+});
+
+app.post("/api/ai/refine", auth, (req, res) => {
+  const { items, instruction } = req.body || {};
+  if (!Array.isArray(items) || !items.length || !instruction?.trim()) return res.status(400).json({ error: "items and instruction required" });
+  aiRoute(res, () => refineItems(items.slice(0, 20), instruction.trim().slice(0, 500)));
 });
 
 // ---------- entries ----------
@@ -296,8 +332,47 @@ app.get("/api/summary", auth, async (req, res, next) => {
       FROM entries WHERE user_id = ${req.userId} AND entry_date = ${date}`;
     const byMeal = await sql`SELECT meal_type, COALESCE(SUM(calories),0)::float AS calories, count(*)::int AS items
       FROM entries WHERE user_id = ${req.userId} AND entry_date = ${date} GROUP BY meal_type`;
-    const [p] = await sql`SELECT calorie_goal, protein_goal_g, carbs_goal_g, fat_goal_g FROM profiles WHERE user_id = ${req.userId}`;
-    res.json({ totals, byMeal, goals: p });
+    const [p] = await sql`SELECT calorie_goal, protein_goal_g, carbs_goal_g, fat_goal_g, water_goal_ml, display_name FROM profiles WHERE user_id = ${req.userId}`;
+    const [w] = await sql`SELECT COALESCE(ml,0)::int AS ml FROM water_log WHERE user_id = ${req.userId} AND log_date = ${date}`.then((r) => (r.length ? r : [{ ml: 0 }]));
+    // streak: consecutive logged days ending on `date` (or the day before, so a fresh morning doesn't break it)
+    const logged = await sql`SELECT DISTINCT entry_date::text AS d FROM entries WHERE user_id = ${req.userId} AND entry_date <= ${date} ORDER BY d DESC LIMIT 120`;
+    const set = new Set(logged.map((r) => r.d));
+    let streak = 0, cursor = new Date(date + "T12:00:00Z");
+    if (!set.has(date)) cursor.setUTCDate(cursor.getUTCDate() - 1);
+    while (set.has(cursor.toISOString().slice(0, 10))) { streak++; cursor.setUTCDate(cursor.getUTCDate() - 1); }
+    res.json({ totals, byMeal, goals: p, water_ml: w.ml, streak });
+  } catch (e) { next(e); }
+});
+
+// ---------- water ----------
+app.post("/api/water", auth, async (req, res, next) => {
+  try {
+    const { date, delta_ml, set_ml } = req.body || {};
+    if (!DATE_RE.test(date || "")) return res.status(400).json({ error: "date required" });
+    let row;
+    if (Number.isFinite(+set_ml)) {
+      [row] = await sql`INSERT INTO water_log (user_id, log_date, ml) VALUES (${req.userId}, ${date}, ${Math.max(0, Math.round(+set_ml))})
+        ON CONFLICT (user_id, log_date) DO UPDATE SET ml = EXCLUDED.ml, updated_at = now() RETURNING ml`;
+    } else {
+      const d = Math.round(+delta_ml || 0);
+      [row] = await sql`INSERT INTO water_log (user_id, log_date, ml) VALUES (${req.userId}, ${date}, ${Math.max(0, d)})
+        ON CONFLICT (user_id, log_date) DO UPDATE SET ml = GREATEST(0, water_log.ml + ${d}), updated_at = now() RETURNING ml`;
+    }
+    res.json({ ml: row.ml });
+  } catch (e) { next(e); }
+});
+
+// ---------- export ----------
+app.get("/api/export.csv", auth, async (req, res, next) => {
+  try {
+    const rows = await sql`SELECT entry_date::text AS date, meal_type, name, brand, serving_desc, quantity, calories, protein_g, carbs_g, fat_g, source
+      FROM entries WHERE user_id = ${req.userId} ORDER BY entry_date, created_at`;
+    const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = ["date,meal,name,brand,serving,quantity,calories,protein_g,carbs_g,fat_g,source",
+      ...rows.map((r) => [r.date, r.meal_type, r.name, r.brand, r.serving_desc, r.quantity, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.source].map(q).join(","))].join("\n");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="macro-export-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
   } catch (e) { next(e); }
 });
 

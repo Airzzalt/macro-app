@@ -39,6 +39,9 @@ async function api(path, opts = {}) {
   return data;
 }
 
+/* ---------- haptics (Android; iOS ignores silently) ---------- */
+function buzz(ms = 8) { try { navigator.vibrate?.(ms); } catch {} }
+
 /* ---------- toast ---------- */
 let toastTimer;
 function toast(msg, ms = 2600) {
@@ -62,10 +65,26 @@ function openSheet(build) {
   const body = $(".sheet-body", sh);
   document.body.append(bd, sh);
   const close = () => {
-    bd.classList.remove("show"); sh.classList.remove("show");
-    setTimeout(() => { bd.remove(); sh.remove(); }, 330);
+    bd.classList.remove("show"); sh.classList.remove("show"); sh.classList.remove("dragging"); sh.style.transform = "";
+    setTimeout(() => { bd.remove(); sh.remove(); }, 430);
   };
   bd.addEventListener("click", close);
+  // drag-to-dismiss from the top of the sheet (grab handle / when the body is scrolled to top)
+  let startY = 0, dy = 0, dragging = false;
+  sh.addEventListener("touchstart", (e) => {
+    if (body.scrollTop > 0 && e.target !== sh.firstElementChild) return;
+    startY = e.touches[0].clientY; dy = 0; dragging = true; sh.classList.add("dragging");
+  }, { passive: true });
+  sh.addEventListener("touchmove", (e) => {
+    if (!dragging) return;
+    dy = Math.max(0, e.touches[0].clientY - startY);
+    if (dy > 0) sh.style.transform = `translateY(${dy}px)`;
+  }, { passive: true });
+  sh.addEventListener("touchend", () => {
+    if (!dragging) return;
+    dragging = false; sh.classList.remove("dragging");
+    if (dy > 90) { buzz(); close(); } else sh.style.transform = "";
+  });
   build(body, close);
   requestAnimationFrame(() => { bd.classList.add("show"); sh.classList.add("show"); });
   return close;
@@ -89,24 +108,35 @@ function show(view) {
   if (view === "weight") loadWeight();
   if (view === "settings") loadSettings();
 }
-$$("#tabbar .tab").forEach((t) => t.addEventListener("click", () => show(t.dataset.view)));
-$("#fabAdd").addEventListener("click", () => openAddSheet());
+$$("#tabbar .tab").forEach((t) => t.addEventListener("click", () => { buzz(); show(t.dataset.view); }));
+$("#fabAdd").addEventListener("click", () => { buzz(); openAddSheet(); });
 
 /* ================= AUTH ================= */
-let hasAccount = true;
+let authMode = "login", inviteRequired = false;
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 function showAuth() {
   show("auth");
-  $("#authBtn").textContent = hasAccount ? "Sign in" : "Create account";
-  $("#authSub").textContent = hasAccount ? "Welcome back" : "Set up your account — it's just for you";
-  $("#authPass").autocomplete = hasAccount ? "current-password" : "new-password";
+  setAuthMode(authMode);
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+  $("#installHint").classList.toggle("hidden", isStandalone() || !ios);
 }
+function setAuthMode(m) {
+  authMode = m;
+  $$("#authMode button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
+  $("#authBtn").textContent = m === "login" ? "Sign in" : "Create account";
+  $("#authSub").textContent = m === "login" ? "Welcome back" : "Your own private tracker";
+  $("#authPass").autocomplete = m === "login" ? "current-password" : "new-password";
+  $("#authInviteWrap").classList.toggle("hidden", !(m === "register" && inviteRequired));
+}
+$$("#authMode button").forEach((b) => b.addEventListener("click", () => setAuthMode(b.dataset.m)));
 $("#authForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = $("#authBtn"); btn.disabled = true;
   try {
-    const body = { username: $("#authUser").value.trim(), password: $("#authPass").value };
-    const { user } = await api(hasAccount ? "/api/auth/login" : "/api/auth/register", { method: "POST", body });
+    const body = { username: $("#authUser").value.trim(), password: $("#authPass").value, invite: $("#authInvite").value.trim() };
+    const { user } = await api(authMode === "login" ? "/api/auth/login" : "/api/auth/register", { method: "POST", body });
     state.user = user;
+    buzz(15);
     if (!user.onboarded) startOnboarding(); else show("today");
   } catch (err) { toast(err.message); }
   btn.disabled = false;
@@ -143,6 +173,7 @@ function renderObStep() {
       <div class="stack" style="gap:18px">
         <div><h1>About you</h1><p class="sub">Used to calculate your energy needs — accurately.</p></div>
         <div class="card stack">
+          <label class="field">Your name<input id="obName" value="${esc(ob.display_name || "")}" placeholder="What should we call you?" maxlength="40" autocomplete="given-name"></label>
           <div class="seg" id="obSex">
             <button data-v="male" class="${ob.sex === "male" ? "on" : ""}">Male</button>
             <button data-v="female" class="${ob.sex === "female" ? "on" : ""}">Female</button>
@@ -157,7 +188,7 @@ function renderObStep() {
       </div>`;
     $$("#obSex button").forEach((b) => b.addEventListener("click", () => { ob.sex = b.dataset.v; $$("#obSex button").forEach((x) => x.classList.toggle("on", x === b)); }));
     $("#obNext").addEventListener("click", () => {
-      ob.birth_date = $("#obDob").value; ob.height_cm = +$("#obH").value; ob.weight_kg = +$("#obW").value;
+      ob.display_name = $("#obName").value.trim(); ob.birth_date = $("#obDob").value; ob.height_cm = +$("#obH").value; ob.weight_kg = +$("#obW").value;
       if (!ob.birth_date || !ob.height_cm || !ob.weight_kg) return toast("Fill in all three fields");
       obStepIdx = 1; renderObStep();
     });
@@ -228,7 +259,8 @@ function renderObStep() {
           onboarded: true, log_weight_date: localISO(),
         }});
         state.user.onboarded = true;
-        toast("You're all set");
+        state.displayName = ob.display_name || "";
+        buzz(20); toast("You're all set");
         show("today");
       } catch (e) { toast(e.message); }
     });
@@ -239,19 +271,90 @@ function renderObStep() {
 const MEAL_META = { breakfast: ["Breakfast", "🌅"], lunch: ["Lunch", "☀️"], dinner: ["Dinner", "🌙"], snack: ["Snacks", "✦"] };
 const RING_LEN = 2 * Math.PI * 96;
 
+const dayCache = {}; // date -> {summary, entries} for instant re-renders
+function refreshToday() { delete dayCache[state.date]; weekCache = null; buzz(12); return loadToday(); }
+let weekCache = null;
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? "Late night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
 async function loadToday() {
-  $("#todayEyebrow").textContent = state.date === localISO() ? "Today" : new Date(state.date + "T12:00").toLocaleDateString("en-AU", { year: "numeric" });
-  $("#todayDate").textContent = state.date === localISO() ? prettyDate(state.date).split(",")[1]?.trim() || prettyDate(state.date) : prettyDate(state.date);
+  const today = localISO();
+  const isToday = state.date === today;
+  $("#todayEyebrow").textContent = isToday ? "Today" : prettyDate(state.date).split(",")[0];
+  $("#todayDate").textContent = isToday
+    ? `${greeting()}${state.displayName ? ", " + state.displayName : ""}`
+    : prettyDate(state.date).split(",")[1]?.trim() || prettyDate(state.date);
+  renderWeekStrip();
+  const cached = dayCache[state.date];
+  if (cached) { renderRing(cached.summary.totals, cached.summary.goals); renderWater(cached.summary); renderStreak(cached.summary.streak); renderMeals(cached.entries); }
   try {
-    const [{ totals, goals }, { entries }] = await Promise.all([
+    const [summary, { entries }, week] = await Promise.all([
       api(`/api/summary?date=${state.date}`),
       api(`/api/entries?date=${state.date}`),
+      api(`/api/history?days=7&end=${today}`),
     ]);
-    state.profileGoals = goals;
-    renderRing(totals, goals);
+    dayCache[state.date] = { summary, entries };
+    weekCache = week;
+    state.profileGoals = summary.goals;
+    if (summary.goals?.display_name && summary.goals.display_name !== state.displayName) { state.displayName = summary.goals.display_name; if (isToday) $("#todayDate").textContent = `${greeting()}, ${state.displayName}`; }
+    renderRing(summary.totals, summary.goals);
+    renderWater(summary);
+    renderStreak(summary.streak);
     renderMeals(entries);
+    renderWeekStrip();
   } catch (e) { if (e.message !== "Signed out") toast(e.message); }
 }
+
+function renderWeekStrip() {
+  const today = localISO();
+  const goal = +state.profileGoals?.calorie_goal || 0;
+  const byDate = Object.fromEntries((weekCache?.days || []).map((d) => [d.date, d]));
+  // 7-day window ending today, unless viewing an older date — then centre on it
+  const end = state.date > today ? state.date : today;
+  const start = state.date < addDays(end, -6) ? state.date : addDays(end, -6);
+  $("#weekStrip").innerHTML = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(start, i);
+    const dt = new Date(d + "T12:00");
+    const row = byDate[d];
+    const dot = row ? (goal && row.calories > goal ? "over" : "logged") : "";
+    return `<button data-d="${d}" class="${d === state.date ? "on" : ""} ${d > today ? "future" : ""}"><span>${dt.toLocaleDateString("en-AU", { weekday: "narrow" })}</span><b>${dt.getDate()}</b><i class="${dot}"></i></button>`;
+  }).join("");
+  $$("#weekStrip button").forEach((b) => b.addEventListener("click", () => { if (b.dataset.d === state.date) return; buzz(); state.date = b.dataset.d; loadToday(); }));
+}
+
+function renderStreak(n) {
+  const chip = $("#streakChip");
+  const prev = +chip.querySelector("b").textContent;
+  chip.querySelector("b").textContent = n || 0;
+  chip.style.opacity = n ? 1 : 0.55;
+  if (n > prev) { chip.classList.remove("bump"); void chip.offsetWidth; chip.classList.add("bump"); }
+}
+
+function renderWater(s) {
+  const goal = +s.goals?.water_goal_ml || 2500, ml = +s.water_ml || 0;
+  state.waterMl = ml; state.waterGoal = goal;
+  $("#waterNow").textContent = ml.toLocaleString();
+  $("#waterGoal").textContent = goal.toLocaleString();
+  $("#waterFill").style.width = `${Math.min((ml / goal) * 100, 100)}%`;
+  const glasses = Math.max(Math.round(goal / 250), 4);
+  const full = Math.min(Math.round(ml / 250), glasses);
+  $("#glasses").innerHTML = Array.from({ length: glasses }, (_, i) => `<span class="${i < full ? "full" : ""}"></span>`).join("");
+}
+$$("[data-water]").forEach((b) => b.addEventListener("click", async () => {
+  const delta = +b.dataset.water;
+  buzz();
+  // optimistic
+  renderWater({ goals: { water_goal_ml: state.waterGoal }, water_ml: Math.max(0, (state.waterMl || 0) + delta) });
+  try {
+    const { ml } = await api("/api/water", { method: "POST", body: { date: state.date, delta_ml: delta } });
+    renderWater({ goals: { water_goal_ml: state.waterGoal }, water_ml: ml });
+    if (dayCache[state.date]) dayCache[state.date].summary.water_ml = ml;
+    if (ml >= state.waterGoal && ml - delta < state.waterGoal) toast("💧 Water goal hit");
+  } catch (e) { toast(e.message); loadToday(); }
+}));
 
 // animated count-up for the hero numbers
 const countState = {};
@@ -324,8 +427,18 @@ function renderMeals(entries) {
   });
 }
 
-$("#dayPrev").addEventListener("click", () => { state.date = addDays(state.date, -1); loadToday(); });
-$("#dayNext").addEventListener("click", () => { state.date = addDays(state.date, 1); loadToday(); });
+// swipe left/right on the ring card to move a day
+(() => {
+  let x0 = null;
+  const ring = $(".ring-wrap");
+  ring.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  ring.addEventListener("touchend", (e) => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) < 60) return;
+    buzz(); state.date = addDays(state.date, dx < 0 ? 1 : -1); loadToday();
+  });
+})();
 
 /* ---------- entry edit ---------- */
 function openEntryEdit(e) {
@@ -350,11 +463,11 @@ function openEntryEdit(e) {
           name: $("#eeName", body).value, calories: +$("#eeCal", body).value, protein_g: +$("#eeP", body).value,
           carbs_g: +$("#eeC", body).value, fat_g: +$("#eeF", body).value, meal_type: meal,
         }});
-        close(); loadToday();
+        close(); refreshToday();
       } catch (err) { toast(err.message); }
     });
     $("#eeDel", body).addEventListener("click", async () => {
-      try { await api(`/api/entries/${e.id}`, { method: "DELETE" }); close(); loadToday(); toast("Deleted"); }
+      try { await api(`/api/entries/${e.id}`, { method: "DELETE" }); close(); refreshToday(); toast("Deleted"); }
       catch (err) { toast(err.message); }
     });
   });
@@ -490,7 +603,7 @@ function openPortionSheet(food, meal, closeParent) {
         }] } });
         close(); closeParent?.();
         toast(`Added ${food.name}`);
-        loadToday();
+        refreshToday();
       } catch (e) { toast(e.message); }
     });
   });
@@ -566,15 +679,22 @@ function renderAiConfirm(body, { items, confidence, notes }, getMeal, closeParen
     <div><h2 style="font-size:18px">Check &amp; confirm</h2>
       <p class="sub" style="font-size:13px">${esc(notes || "")} <span class="chip" style="vertical-align:1px">${esc(confidence)} confidence</span></p></div>
     <div id="ciList" class="stack" style="gap:10px"></div>
+    <div class="row"><input id="ciRefine" placeholder="Not quite? e.g. “it was a large bowl, with cheese”" style="flex:1"><button class="btn btn-sm" id="ciRefineGo" style="flex:none">Adjust</button></div>
     <button class="btn" id="ciSave"></button>
     <button class="btn btn-quiet" id="ciSaveMeal" style="margin:-6px auto 0">Also save as a reusable meal…</button>`;
   const list = $("#ciList", body);
   const rows = items.map((it) => ({ ...it }));
+  $("#ciRefineGo", body).addEventListener("click", () => {
+    const instruction = $("#ciRefine", body).value.trim();
+    if (!instruction) return toast("Tell the AI what to change");
+    aiAnalyze(body, () => api("/api/ai/refine", { method: "POST", body: { items: rows, instruction } }), getMeal, closeParent);
+  });
   function draw() {
     list.innerHTML = rows.map((it, i) => `
       <div class="confirm-item">
         <div class="row"><input value="${esc(it.name)}" data-f="name" data-i="${i}" style="flex:1"><button class="icon-btn" style="width:32px;height:32px;font-size:14px" data-del="${i}" aria-label="Remove">✕</button></div>
         <div class="s" style="font-size:12px;color:var(--text-3)">${esc(it.serving_desc || "")}</div>
+        ${it.warning ? `<div class="warn">⚠︎ ${esc(it.warning)}</div>` : ""}
         <div class="mini-grid">
           <label>kcal<input type="number" inputmode="decimal" value="${r0(it.calories)}" data-f="calories" data-i="${i}"></label>
           <label>P g<input type="number" inputmode="decimal" value="${r1(it.protein_g)}" data-f="protein_g" data-i="${i}"></label>
@@ -593,8 +713,8 @@ function renderAiConfirm(body, { items, confidence, notes }, getMeal, closeParen
   draw();
   $("#ciSave", body).addEventListener("click", async () => {
     try {
-      await api("/api/entries", { method: "POST", body: { entry_date: state.date, meal_type: getMeal(), items: rows.map((x) => ({ ...x, source: "ai" })) } });
-      closeParent?.(); toast("Logged"); loadToday();
+      await api("/api/entries", { method: "POST", body: { entry_date: state.date, meal_type: getMeal(), items: rows.map(({ warning, ...x }) => ({ ...x, source: "ai" })) } });
+      closeParent?.(); toast("Logged"); refreshToday();
     } catch (e) { toast(e.message); }
   });
   $("#ciSaveMeal", body).addEventListener("click", () => {
@@ -632,7 +752,7 @@ async function renderSavedTab({ body, close, getMeal }) {
     $$("[data-logmeal]", body).forEach((b) => b.addEventListener("click", async () => {
       try {
         await api(`/api/meals/${b.dataset.logmeal}/log`, { method: "POST", body: { entry_date: state.date, meal_type: getMeal() } });
-        close(); toast("Logged"); loadToday();
+        close(); toast("Logged"); refreshToday();
       } catch (e) { toast(e.message); }
     }));
     $$("[data-recent]", body).forEach((b) => b.addEventListener("click", () => {
@@ -670,7 +790,7 @@ function renderManualTab({ body, close, getMeal }) {
         name, calories: cal, protein_g: +$("#mP", body).value || 0, carbs_g: +$("#mC", body).value || 0,
         fat_g: +$("#mF", body).value || 0, serving_desc: $("#mServ", body).value.trim() || null, quantity: 1, source: "manual",
       }] } });
-      close(); toast(`Added ${name}`); loadToday();
+      close(); toast(`Added ${name}`); refreshToday();
     } catch (e) { toast(e.message); }
   });
 }
@@ -742,8 +862,16 @@ async function loadHistory() {
   try {
     const { days, calorie_goal } = await api("/api/history?days=30");
     const byDate = Object.fromEntries(days.map((d) => [d.date, d]));
-    // chart: last 14 days
     const goal = +calorie_goal || 2000;
+    // this week: last 7 days incl. today
+    const wk = Array.from({ length: 7 }, (_, i) => byDate[addDays(localISO(), -i)]).filter(Boolean);
+    const avg = (k) => (wk.length ? Math.round(wk.reduce((a, d) => a + +d[k], 0) / wk.length) : 0);
+    const onTarget = wk.filter((d) => d.calories <= goal && d.calories >= goal * 0.75).length;
+    $("#weekStats").innerHTML = `
+      <div><div class="v">${avg("calories").toLocaleString()}</div><div class="l">avg kcal</div></div>
+      <div><div class="v">${onTarget}<span style="font-size:13px;color:var(--text-3)">/${wk.length}</span></div><div class="l">on target</div></div>
+      <div><div class="v" style="font-size:13.5px;line-height:1.6;letter-spacing:0"><span style="color:var(--protein)">${avg("protein_g")}</span> · <span style="color:var(--carbs)">${avg("carbs_g")}</span> · <span style="color:var(--fat)">${avg("fat_g")}</span></div><div class="l">avg P · C · F</div></div>`;
+    // chart: last 14 days
     const N = 14, W = 380, H = 150, PAD = 6;
     const dates = Array.from({ length: N }, (_, i) => addDays(localISO(), i - N + 1));
     const maxV = Math.max(goal * 1.25, ...dates.map((d) => +byDate[d]?.calories || 0));
@@ -781,9 +909,16 @@ async function loadHistory() {
 /* ================= WEIGHT ================= */
 async function loadWeight() {
   try {
-    const { weights } = await api(`/api/weight?days=${state.wdays}`);
+    const [{ weights }, { profile }] = await Promise.all([api(`/api/weight?days=${state.wdays}`), api("/api/profile")]);
     const last = weights[weights.length - 1];
     $("#wNow").textContent = last ? `${r1(last.weight_kg)} kg` : "–";
+    const gw = +profile?.goal_weight_kg;
+    const gl = $("#wGoalLine");
+    if (gw && last) {
+      const diff = r1(last.weight_kg - gw);
+      gl.textContent = Math.abs(diff) < 0.3 ? `🎯 At your goal weight of ${gw} kg` : `${Math.abs(diff)} kg ${diff > 0 ? "to lose" : "to gain"} to reach ${gw} kg`;
+      gl.classList.remove("hidden");
+    } else gl.classList.add("hidden");
     $("#wTrendLabel").textContent = `${state.wdays}-day change`;
     if (weights.length >= 2) {
       const diff = r1(last.weight_kg - weights[0].weight_kg);
@@ -849,6 +984,9 @@ async function loadSettings() {
       $("#gPro").value = profile.protein_goal_g || "";
       $("#gCarb").value = profile.carbs_goal_g || "";
       $("#gFat").value = profile.fat_goal_g || "";
+      $("#gWater").value = profile.water_goal_ml || 2500;
+      $("#gWeight").value = profile.goal_weight_kg || "";
+      $("#sName").value = profile.display_name || "";
       $("#sSex").value = profile.sex || "male";
       $("#sDob").value = profile.birth_date ? profile.birth_date.slice(0, 10) : "";
       $("#sHeight").value = profile.height_cm || "";
@@ -877,9 +1015,33 @@ $("#saveGoals").addEventListener("click", async () => {
     await api("/api/profile", { method: "PUT", body: {
       calorie_goal: +$("#gCal").value || null, protein_goal_g: +$("#gPro").value || null,
       carbs_goal_g: +$("#gCarb").value || null, fat_goal_g: +$("#gFat").value || null,
+      water_goal_ml: +$("#gWater").value || null, goal_weight_kg: +$("#gWeight").value || null,
     }});
-    toast("Goals saved");
+    Object.keys(dayCache).forEach((k) => delete dayCache[k]);
+    buzz(12); toast("Goals saved");
   } catch (e) { toast(e.message); }
+});
+$("#saveName").addEventListener("click", async () => {
+  try {
+    await api("/api/profile", { method: "PUT", body: { display_name: $("#sName").value.trim() || null } });
+    state.displayName = $("#sName").value.trim();
+    Object.keys(dayCache).forEach((k) => delete dayCache[k]);
+    toast("Saved");
+  } catch (e) { toast(e.message); }
+});
+$("#exportBtn").addEventListener("click", () => { window.location.href = "/api/export.csv"; });
+$("#deleteAcct").addEventListener("click", () => {
+  openSheet((body, close) => {
+    body.innerHTML = `<h2>Delete account</h2><p class="sub">This permanently deletes your account and every entry, meal and weigh-in. There's no undo.</p>
+      <input id="delPw" type="password" placeholder="Confirm your password" autocomplete="current-password">
+      <button class="btn btn-danger" id="delGo">Delete everything</button>`;
+    $("#delGo", body).addEventListener("click", async () => {
+      try {
+        await api("/api/auth/account", { method: "DELETE", body: { password: $("#delPw", body).value } });
+        close(); state.user = null; toast("Account deleted"); showAuth();
+      } catch (e) { toast(e.message); }
+    });
+  });
 });
 $("#recalcBtn").addEventListener("click", async () => {
   const stats = {
@@ -916,8 +1078,8 @@ $("#logoutBtn").addEventListener("click", async () => {
 /* ================= BOOT ================= */
 (async function boot() {
   try {
-    const s = await api("/api/auth/state");
-    hasAccount = s.hasAccount;
+    const [s, cfg] = await Promise.all([api("/api/auth/state"), api("/api/auth/config").catch(() => ({}))]);
+    inviteRequired = !!cfg.inviteRequired;
     if (s.user) {
       state.user = s.user;
       if (!s.user.onboarded) startOnboarding(); else show("today");
