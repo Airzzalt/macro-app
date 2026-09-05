@@ -703,13 +703,22 @@ function renderAiTab({ body, close, getMeal }) {
     <button class="ai-tile" id="aiLabel"><span class="ic-badge ai">${ICON.tag}</span><span><div class="t">Scan a nutrition label</div><div class="d">Photo of the panel — reads kJ/kcal, serving size, macros</div></span></button>
     <button class="ai-tile" id="aiMeal"><span class="ic-badge ai">${ICON.camera}</span><span><div class="t">Photo of your meal</div><div class="d">Snap the plate, optionally describe what's in it</div></span></button>
     <button class="ai-tile" id="aiText"><span class="ic-badge ai">${ICON.chat}</span><span><div class="t">Describe what you ate</div><div class="d">"Chicken wrap and a flat white" — AI estimates it</div></span></button>
-    <input type="file" accept="image/*" capture="environment" id="aiFileLabel" class="hidden">`;
+    <input type="file" accept="image/*" id="aiFileLabel" class="hidden">`;
   $("#aiLabel", body).addEventListener("click", () => {
     const f = $("#aiFileLabel", body);
     f.onchange = async () => {
       if (!f.files[0]) return;
-      const img = await downscale(f.files[0]);
-      aiAnalyze(body, () => api("/api/ai/label", { method: "POST", body: { image: img } }), getMeal, close);
+      let img;
+      try { img = await downscale(f.files[0]); } catch { return toast("Couldn't read that photo — try another"); }
+      body.innerHTML = `
+        <h2 style="font-size:18px">Nutrition label</h2>
+        <div style="border-radius:14px;overflow:hidden;max-height:220px"><img src="${img}" style="width:100%;object-fit:contain;max-height:220px;display:block" alt="Label photo"></div>
+        <input id="lblNote" placeholder="Optional note — e.g. “I had 2 serves”" maxlength="200">
+        <button class="btn" id="lblGo">Read label</button>`;
+      $("#lblGo", body).addEventListener("click", () => {
+        const note = $("#lblNote", body).value.trim();
+        aiAnalyze(body, () => api("/api/ai/label", { method: "POST", body: { image: img, note } }), getMeal, close);
+      });
     };
     f.click();
   });
@@ -735,24 +744,26 @@ function renderMealPhotoForm(body, getMeal, close) {
     <div id="mpPreview" class="hidden" style="border-radius:14px;overflow:hidden;max-height:180px"><img id="mpImg" style="width:100%;object-fit:cover" alt="Meal photo"></div>
     <textarea id="mpDesc" placeholder="Optional — describe it: what you used, portion sizes, cooking oil…"></textarea>
     <button class="btn" id="mpGo" disabled>Analyse meal</button>
-    <input type="file" accept="image/*" capture="environment" id="mpFile" class="hidden">`;
+    <input type="file" accept="image/*" id="mpFile" class="hidden">`;
   let imgData = null;
   const f = $("#mpFile", body);
   $("#mpPick", body).addEventListener("click", () => f.click());
   f.onchange = async () => {
     if (!f.files[0]) return;
-    imgData = await downscale(f.files[0]);
+    try { imgData = await downscale(f.files[0]); } catch { return toast("Couldn't read that photo — try another"); }
     $("#mpImg", body).src = imgData;
     $("#mpPreview", body).classList.remove("hidden");
     $("#mpGo", body).disabled = false;
   };
   $("#mpGo", body).addEventListener("click", () => {
-    aiAnalyze(body, () => api("/api/ai/meal", { method: "POST", body: { image: imgData, description: $("#mpDesc", body).value.trim() } }), getMeal, close);
+    if (!imgData) return toast("Add a photo first");
+    const description = $("#mpDesc", body).value.trim();
+    aiAnalyze(body, () => api("/api/ai/meal", { method: "POST", body: { image: imgData, description } }), getMeal, close);
   });
 }
 
 async function aiAnalyze(body, call, getMeal, closeParent) {
-  body.innerHTML = `<div class="stack" style="align-items:center;padding:30px 0;gap:14px"><div class="spin" style="width:34px;height:34px"></div><p class="sub">Analysing with AI…</p></div>`;
+  body.innerHTML = `<div class="stack" style="align-items:center;padding:30px 0;gap:14px"><div class="spin" style="width:34px;height:34px"></div><p class="sub">Analysing with AI…</p><p class="sub" style="font-size:12px;color:var(--text-3)">Usually 5–20 seconds</p></div>`;
   try {
     const res = await call();
     renderAiConfirm(body, res, getMeal, closeParent);
@@ -924,20 +935,26 @@ async function startBarcodeScan(meal, closeParent) {
 }
 
 /* ---------- image downscale ---------- */
-function downscale(file, max = 1280, quality = 0.85) {
+async function downscale(file, max = 1280, quality = 0.85) {
+  const draw = (src, w, h) => {
+    const scale = Math.min(max / Math.max(w, h), 1);
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
+    c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+    const out = c.toDataURL("image/jpeg", quality);
+    if (out.length < 100) throw new Error("empty image");
+    return out;
+  };
+  // Preferred: createImageBitmap honours EXIF orientation and decodes HEIC where the browser can
+  if ("createImageBitmap" in window) {
+    try { const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); const out = draw(bmp, bmp.width, bmp.height); bmp.close?.(); return out; } catch {}
+  }
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(max / Math.max(img.width, img.height), 1);
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * scale);
-      c.height = Math.round(img.height * scale);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      resolve(c.toDataURL("image/jpeg", quality));
-      URL.revokeObjectURL(img.src);
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
+    img.onload = () => { try { resolve(draw(img, img.naturalWidth, img.naturalHeight)); } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); } };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("decode failed")); };
+    img.src = url;
   });
 }
 
@@ -1173,5 +1190,12 @@ $("#logoutBtn").addEventListener("click", async () => {
       if (!s.user.onboarded) startOnboarding(); else show("today");
     } else showAuth();
   } catch { showAuth(); }
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").then((reg) => {
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
+      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+    }).catch(() => {});
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) location.reload(); hadController = true; });
+  }
 })();

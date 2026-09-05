@@ -233,7 +233,9 @@ const r1 = (n) => Math.round(n * 10) / 10;
 
 async function aiRoute(res, fn) {
   try {
-    const parsed = await fn();
+    let parsed;
+    try { parsed = await fn(); }
+    catch (e) { if (/JSON/.test(e.message)) parsed = await fn(); else throw e; } // one retry if the model replied with prose
     const items = validItems(parsed);
     if (!items.length) return res.status(422).json({ error: "The AI couldn't find nutrition info in that — try a clearer photo or add a description", notes: parsed?.notes });
     res.json({ items, confidence: parsed.confidence || "medium", notes: parsed.notes || "" });

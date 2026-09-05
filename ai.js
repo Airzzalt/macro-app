@@ -123,6 +123,7 @@ export async function analyzeLabel(imageDataUrl, note) {
 ${note ? `User note: ${note}` : ""}
 Return JSON: {"items":[...], "confidence": "high"|"medium"|"low", "notes": string}
 Exactly one item representing ONE serving as stated on the label (put the serving size in serving_desc). If the label only shows per-100g, use per-100g and say so in serving_desc. Include the product name if visible on packaging.
+If the user's note says how much they actually ate (e.g. "2 serves", "half the pack", "60g"), scale every value to that amount and describe it in serving_desc (e.g. "2 servings (80g)").
 ${ITEM_SCHEMA}
 ${RULES}` },
     { type: "image_url", image_url: { url: imageDataUrl, detail: "high" } },
