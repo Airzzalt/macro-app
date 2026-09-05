@@ -35,15 +35,33 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ambient glow behind the glass */
+/* ambient liquid glow behind the glass — two drifting layers */
 body::before {
   content: "";
-  position: fixed; inset: 0; z-index: -1;
+  position: fixed; inset: -20%; z-index: -2;
   background:
-    radial-gradient(42rem 42rem at 85% -10%, rgba(10, 132, 255, 0.13), transparent 60%),
-    radial-gradient(36rem 36rem at -15% 30%, rgba(94, 92, 230, 0.10), transparent 60%),
-    radial-gradient(30rem 30rem at 60% 110%, rgba(90, 200, 250, 0.06), transparent 60%),
+    radial-gradient(42rem 42rem at 85% 8%, rgba(10, 132, 255, 0.14), transparent 60%),
+    radial-gradient(36rem 36rem at 0% 40%, rgba(94, 92, 230, 0.11), transparent 60%),
+    radial-gradient(30rem 30rem at 60% 95%, rgba(90, 200, 250, 0.07), transparent 60%),
     var(--bg);
+  animation: drift1 46s ease-in-out infinite alternate;
+}
+body::after {
+  content: "";
+  position: fixed; inset: -25%; z-index: -1;
+  background:
+    radial-gradient(26rem 26rem at 25% 20%, rgba(90, 200, 250, 0.06), transparent 65%),
+    radial-gradient(32rem 32rem at 80% 75%, rgba(10, 132, 255, 0.07), transparent 65%);
+  animation: drift2 64s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes drift1 {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(4%, -3%) scale(1.08); }
+}
+@keyframes drift2 {
+  from { transform: translate(0, 0) rotate(0deg); }
+  to { transform: translate(-5%, 4%) rotate(6deg); }
 }
 
 #app { max-width: 460px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 18px calc(var(--tabbar-h) + 28px); }
@@ -57,16 +75,32 @@ h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
 .sub { color: var(--text-2); font-size: 14px; }
 .num { font-variant-numeric: tabular-nums; }
 
-/* ---------- glass card ---------- */
+/* ---------- glass card with specular edge ---------- */
 .card {
+  position: relative;
   background: var(--glass);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: var(--radius);
   padding: 18px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
+.card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: linear-gradient(155deg, rgba(255,255,255,0.30), rgba(255,255,255,0.04) 26%, rgba(255,255,255,0.01) 52%, rgba(90,200,250,0.12) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* card entrance */
+.stack > .card, #mealList > .card { animation: fadeUp 0.5s cubic-bezier(0.22, 0.9, 0.24, 1) both; }
+.stack > .card:nth-child(2), #mealList > .card:nth-child(2) { animation-delay: 0.05s; }
+.stack > .card:nth-child(3), #mealList > .card:nth-child(3) { animation-delay: 0.1s; }
+.stack > .card:nth-child(4), #mealList > .card:nth-child(4) { animation-delay: 0.15s; }
+.stack > .card:nth-child(5), #mealList > .card:nth-child(5) { animation-delay: 0.2s; }
 .stack { display: flex; flex-direction: column; gap: 14px; }
 .row { display: flex; align-items: center; gap: 10px; }
 .spread { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -76,17 +110,26 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; padding: 15px 22px; border-radius: 980px;
-  background: var(--accent); color: #fff; font-weight: 600; font-size: 16px;
-  transition: transform 0.15s ease, opacity 0.15s ease, filter 0.2s ease;
-  min-height: 50px;
+  background: linear-gradient(180deg, #2b96ff, #0a7aef); color: #fff; font-weight: 600; font-size: 16px;
+  box-shadow: 0 6px 20px rgba(10, 132, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease, filter 0.2s ease, box-shadow 0.25s ease;
+  min-height: 50px; position: relative; overflow: hidden;
 }
-.btn:active { transform: scale(0.97); }
+.btn::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.28) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+.btn:active { transform: scale(0.96); }
+.btn:active::after { transition: transform 0.55s ease; transform: translateX(120%); }
 .btn:disabled { opacity: 0.45; pointer-events: none; }
 .btn-glass {
   background: var(--glass-strong); color: var(--text);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 4px 14px rgba(0, 0, 0, 0.25);
 }
+.btn-danger { box-shadow: none; }
 .btn-quiet { background: none; color: var(--accent); font-weight: 600; width: auto; padding: 8px 12px; min-height: 0; }
 .btn-danger { background: rgba(255, 69, 58, 0.14); color: var(--bad); }
 .btn-sm { width: auto; padding: 9px 16px; min-height: 0; font-size: 14px; }
@@ -110,7 +153,8 @@ input, select, textarea {
   min-height: 48px;
 }
 textarea { min-height: 88px; resize: vertical; }
-input:focus, select:focus, textarea:focus { border-color: rgba(10, 132, 255, 0.65); background: rgba(255, 255, 255, 0.09); }
+input:focus, select:focus, textarea:focus { border-color: rgba(10, 132, 255, 0.65); background: rgba(255, 255, 255, 0.09); box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.16); }
+input, select, textarea { transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.25s ease; }
 input::placeholder, textarea::placeholder { color: var(--text-3); }
 label.field { display: flex; flex-direction: column; gap: 7px; font-size: 13px; font-weight: 600; color: var(--text-2); }
 select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%), linear-gradient(135deg, var(--text-2) 50%, transparent 50%); background-position: calc(100% - 20px) 55%, calc(100% - 15px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
@@ -166,7 +210,14 @@ input[type="date"] { color-scheme: dark; }
 .entry-row {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   padding: 11px 16px; border-top: 1px solid rgba(255, 255, 255, 0.05);
+  animation: rowIn 0.35s cubic-bezier(0.22, 0.9, 0.24, 1) both;
+  transition: background 0.15s ease;
 }
+.entry-row:nth-child(3) { animation-delay: 0.03s; }
+.entry-row:nth-child(4) { animation-delay: 0.06s; }
+.entry-row:nth-child(5) { animation-delay: 0.09s; }
+.entry-row:nth-child(n+6) { animation-delay: 0.12s; }
+@keyframes rowIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
 .entry-row:active { background: rgba(255, 255, 255, 0.04); }
 .entry-row .n { flex: 1; min-width: 0; }
 .entry-row .n .t { font-size: 15px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -194,19 +245,23 @@ input[type="date"] { color-scheme: dark; }
 #tabbar .tab {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
   color: var(--text-3); font-size: 10px; font-weight: 600; padding: 8px 0; border-radius: 20px;
-  transition: color 0.2s ease;
+  transition: color 0.25s ease, transform 0.2s ease;
 }
+#tabbar .tab:active { transform: scale(0.92); }
 #tabbar .tab svg { width: 23px; height: 23px; }
 #tabbar .tab.on { color: var(--text); }
+#tabbar .tab.on svg { animation: popIcon 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes popIcon { 0% { transform: scale(0.7); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
 #tabbar .fab {
   flex: none; width: 52px; height: 52px; border-radius: 50%; margin: 0 4px;
-  background: var(--accent); color: #fff;
+  background: linear-gradient(180deg, #2b96ff, #0a7aef); color: #fff;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 6px 20px rgba(10, 132, 255, 0.45);
-  transition: transform 0.15s ease;
+  box-shadow: 0 6px 22px rgba(10, 132, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
 }
-#tabbar .fab svg { width: 26px; height: 26px; }
-#tabbar .fab:active { transform: scale(0.9); }
+#tabbar .fab svg { width: 26px; height: 26px; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+#tabbar .fab:active { transform: scale(0.88); box-shadow: 0 3px 12px rgba(10, 132, 255, 0.4); }
+#tabbar .fab:active svg { transform: rotate(90deg); }
 
 /* ---------- sheet ---------- */
 .sheet-backdrop {
@@ -224,7 +279,7 @@ input[type="date"] { color-scheme: dark; }
   border: 1px solid var(--glass-border-strong); border-bottom: none;
   border-radius: 26px 26px 0 0;
   padding: 10px 18px calc(max(18px, env(safe-area-inset-bottom)) + 8px);
-  transform: translateY(102%); transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  transform: translateY(102%); transition: transform 0.42s cubic-bezier(0.32, 1.15, 0.28, 1);
   max-height: 88vh; max-height: 88dvh; display: flex; flex-direction: column;
 }
 .sheet.show { transform: translateY(0); }
@@ -290,7 +345,7 @@ input[type="date"] { color-scheme: dark; }
   z-index: 80; background: rgba(30, 30, 38, 0.92); border: 1px solid var(--glass-border-strong);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   color: var(--text); padding: 11px 20px; border-radius: 980px; font-size: 14px; font-weight: 550;
-  opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.45s cubic-bezier(0.34, 1.4, 0.5, 1);
   max-width: 84vw; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -314,6 +369,41 @@ input[type="date"] { color-scheme: dark; }
 
 .fade-in { animation: fadeUp 0.35s cubic-bezier(0.25, 0.1, 0.25, 1); }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* view transitions: re-triggered on every tab switch */
+.view-enter > * { animation: fadeUp 0.45s cubic-bezier(0.22, 0.9, 0.24, 1) both; }
+.view-enter > *:nth-child(2) { animation-delay: 0.06s; }
+.view-enter > *:nth-child(3) { animation-delay: 0.12s; }
+.view-enter > *:nth-child(4) { animation-delay: 0.18s; }
+.view-enter > *:nth-child(n+5) { animation-delay: 0.24s; }
+
+/* skeleton shimmer */
+.skel {
+  border-radius: 16px; height: 60px;
+  background: linear-gradient(100deg, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0.11) 50%, rgba(255,255,255,0.05) 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer { from { background-position: 130% 0; } to { background-position: -90% 0; } }
+
+/* calorie ring glow */
+#ringArc { filter: drop-shadow(0 0 12px rgba(10, 132, 255, 0.5)); }
+#ringArc.over { filter: drop-shadow(0 0 12px rgba(255, 69, 58, 0.55)); }
+
+/* result rows slide in */
+.result-row { animation: rowIn 0.3s cubic-bezier(0.22, 0.9, 0.24, 1) both; transition: background 0.15s ease; }
+.result-row:nth-child(2) { animation-delay: 0.03s; }
+.result-row:nth-child(3) { animation-delay: 0.06s; }
+.result-row:nth-child(4) { animation-delay: 0.09s; }
+.result-row:nth-child(n+5) { animation-delay: 0.12s; }
+
+/* AI tiles & option cards: springy press */
+.ai-tile, .opt { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, border-color 0.15s ease; }
+.ai-tile:active, .opt:active { transform: scale(0.97); }
+.confirm-item { animation: fadeUp 0.4s cubic-bezier(0.22, 0.9, 0.24, 1) both; }
+
+/* icon buttons springy */
+.icon-btn { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

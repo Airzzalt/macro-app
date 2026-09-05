@@ -79,6 +79,10 @@ function show(view) {
   const appViews = ["today", "history", "weight", "settings"];
   $("#tabbar").classList.toggle("hidden", !appViews.includes(view));
   $$("#tabbar .tab").forEach((t) => t.classList.toggle("on", t.dataset.view === view));
+  const el = $(`#view-${view}`);
+  el.classList.remove("view-enter");
+  void el.offsetWidth; // restart entrance animation
+  el.classList.add("view-enter");
   window.scrollTo({ top: 0 });
   if (view === "today") loadToday();
   if (view === "history") loadHistory();
@@ -249,6 +253,24 @@ async function loadToday() {
   } catch (e) { if (e.message !== "Signed out") toast(e.message); }
 }
 
+// animated count-up for the hero numbers
+const countState = {};
+function countUp(sel, to, suffix = "") {
+  const el = $(sel);
+  const from = countState[sel] ?? 0;
+  countState[sel] = to;
+  if (from === to || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    el.textContent = to.toLocaleString() + suffix; return;
+  }
+  const t0 = performance.now(), dur = 600;
+  (function tick(now) {
+    const p = Math.min((now - t0) / dur, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(from + (to - from) * eased).toLocaleString() + suffix;
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+
 function renderRing(t, g) {
   const goal = +g?.calorie_goal || 2000;
   const eaten = r0(t.calories);
@@ -257,11 +279,12 @@ function renderRing(t, g) {
   const arc = $("#ringArc");
   arc.style.strokeDashoffset = RING_LEN * (1 - pct);
   arc.style.stroke = remaining < 0 ? "var(--bad)" : "url(#ringGrad)";
-  $("#ringNum").textContent = Math.abs(remaining).toLocaleString();
+  arc.classList.toggle("over", remaining < 0);
+  countUp("#ringNum", Math.abs(remaining));
   $("#ringLabel").textContent = remaining < 0 ? "kcal over" : "kcal remaining";
-  $("#statEaten").textContent = eaten.toLocaleString();
+  countUp("#statEaten", eaten);
   $("#statGoal").textContent = goal.toLocaleString();
-  $("#statBurnPct").textContent = `${Math.round((eaten / goal) * 100)}%`;
+  countUp("#statBurnPct", Math.round((eaten / goal) * 100), "%");
   setBar("#barP", "#valP", t.protein_g, g?.protein_goal_g);
   setBar("#barC", "#valC", t.carbs_g, g?.carbs_goal_g);
   setBar("#barF", "#valF", t.fat_g, g?.fat_goal_g);
@@ -410,7 +433,7 @@ function renderSearchTab({ body, close, getMeal }) {
     if (q.length < 2) { results.innerHTML = ""; return; }
     timer = setTimeout(async () => {
       const mySeq = ++seq;
-      results.innerHTML = `<div class="row" style="justify-content:center;padding:18px"><div class="spin"></div></div>`;
+      results.innerHTML = `<div class="stack" style="gap:8px;padding-top:6px"><div class="skel" style="height:54px"></div><div class="skel" style="height:54px;animation-delay:.12s"></div><div class="skel" style="height:54px;animation-delay:.24s"></div></div>`;
       try {
         const { results: list } = await api(`/api/search?q=${encodeURIComponent(q)}`);
         if (mySeq !== seq) return;
@@ -589,7 +612,7 @@ function renderAiConfirm(body, { items, confidence, notes }, getMeal, closeParen
 
 /* ---------- saved tab ---------- */
 async function renderSavedTab({ body, close, getMeal }) {
-  body.innerHTML = `<div class="row" style="justify-content:center;padding:18px"><div class="spin"></div></div>`;
+  body.innerHTML = `<div class="skel" style="height:54px"></div><div class="skel" style="height:54px;animation-delay:.12s"></div><div class="skel" style="height:54px;animation-delay:.24s"></div>`;
   try {
     const [{ meals }, { recent }] = await Promise.all([api("/api/meals"), api("/api/recent")]);
     body.innerHTML = `
@@ -712,6 +735,10 @@ function downscale(file, max = 1280, quality = 0.85) {
 
 /* ================= HISTORY ================= */
 async function loadHistory() {
+  if (!$("#histChart").innerHTML) {
+    $("#histChart").innerHTML = `<div class="skel" style="height:150px"></div>`;
+    $("#histList").innerHTML = `<div class="stack" style="gap:8px;padding:12px"><div class="skel" style="height:48px"></div><div class="skel" style="height:48px;animation-delay:.12s"></div></div>`;
+  }
   try {
     const { days, calorie_goal } = await api("/api/history?days=30");
     const byDate = Object.fromEntries(days.map((d) => [d.date, d]));

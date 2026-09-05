@@ -305,10 +305,11 @@ app.get("/api/history", auth, async (req, res, next) => {
   try {
     const days = Math.min(+req.query.days || 30, 365);
     const end = req.query.end && DATE_RE.test(req.query.end) ? req.query.end : new Date().toISOString().slice(0, 10);
+    const start = new Date(new Date(end + "T12:00:00Z").getTime() - days * 864e5).toISOString().slice(0, 10);
     const rows = await sql`SELECT entry_date::text AS date, COALESCE(SUM(calories),0)::float AS calories,
         COALESCE(SUM(protein_g),0)::float AS protein_g, COALESCE(SUM(carbs_g),0)::float AS carbs_g,
         COALESCE(SUM(fat_g),0)::float AS fat_g, count(*)::int AS items
-      FROM entries WHERE user_id = ${req.userId} AND entry_date > ${end}::date - ${days} AND entry_date <= ${end}
+      FROM entries WHERE user_id = ${req.userId} AND entry_date > ${start} AND entry_date <= ${end}
       GROUP BY entry_date ORDER BY entry_date DESC`;
     const [p] = await sql`SELECT calorie_goal FROM profiles WHERE user_id = ${req.userId}`;
     res.json({ days: rows, calorie_goal: p?.calorie_goal || null });
@@ -374,8 +375,9 @@ app.delete("/api/meals/:id", auth, async (req, res, next) => {
 app.get("/api/weight", auth, async (req, res, next) => {
   try {
     const days = Math.min(+req.query.days || 90, 730);
+    const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
     const rows = await sql`SELECT log_date::text AS date, weight_kg::float FROM weight_log
-      WHERE user_id = ${req.userId} AND log_date > CURRENT_DATE - ${days} ORDER BY log_date`;
+      WHERE user_id = ${req.userId} AND log_date > ${start} ORDER BY log_date`;
     res.json({ weights: rows });
   } catch (e) { next(e); }
 });
